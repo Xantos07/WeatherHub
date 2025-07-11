@@ -9,4 +9,4 @@ COPY .env /app/.env
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-CMD ["python"]
+CMD ["python", "scripts/Importation.py"]
