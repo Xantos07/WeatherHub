@@ -4,6 +4,9 @@
 
 Ce script importe et transforme les données météorologiques depuis Amazon S3 vers MongoDB, en uniformisant les différents formats de données (Hourly, WeatherBE, WeatherFR) dans une structure cohérente.
 
+Lien vers comment déployer le projt sous le Service ECR d'AWS [Consulter le Wiki](https://github.com/Xantos07/WeatherHub/wiki/D%C3%A9ployer-sur-AWS-ECR)
+
+
 ## 🏗️ Architecture des Données
 
 ### Collections MongoDB
