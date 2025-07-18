@@ -5,7 +5,8 @@ import pandas as pd
 import json
 from pymongo import MongoClient
 from io import BytesIO
-from datetime import datetime, time
+import time
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Charger les variables d'environnement
@@ -16,10 +17,16 @@ AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 S3_BUCKET = os.getenv('S3_BUCKET')
 MONGO_INITDB_ROOT_USERNAME = os.getenv('MONGO_INITDB_ROOT_USERNAME')
 MONGO_INITDB_ROOT_PASSWORD = os.getenv('MONGO_INITDB_ROOT_PASSWORD')
+MONGO_HOST = os.getenv('MONGO_HOST', '172.31.0.23')
 
 # Connexions
 s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
-mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/")
+
+# ECR production
+mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:27017/")
+
+# Pour le développement local, décommenter la ligne suivante
+# mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/")
 db = mongo_client['weatherhub']
 
 '''
