@@ -23,11 +23,45 @@ MONGO_HOST = os.getenv('MONGO_HOST', '172.31.0.23')
 s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
 
 # ECR production
-mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:27017/")
+# mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:27017/")
 
 # Pour le développement local, décommenter la ligne suivante
-# mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/")
+mongo_client = MongoClient(f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/")
 db = mongo_client['weatherhub']
+
+# Données des stations WeatherFR et WeatherBE
+WEATHER_STATIONS = {
+    'WeatherFR': {
+        'id': 'ILAMAD25',
+        'name': 'La Madeleine',
+        'latitude': 50.659,
+        'longitude': 3.07,
+        'elevation': 23,
+        'city': 'La Madeleine',
+        'state': '-/-',
+        'hardware': 'other',
+        'software': 'EasyWeatherPro_V5.1.6',
+        'type': 'weather_underground',
+        'license': {
+            'source': 'Weather Underground'
+        }
+    },
+    'WeatherBE': {
+        'id': 'IICHTE19',
+        'name': 'WeerstationBS',
+        'latitude': 51.092,
+        'longitude': 2.999,
+        'elevation': 15,
+        'city': 'Ichtegem',
+        'state': '-/-',
+        'hardware': 'other',
+        'software': 'EasyWeatherV1.6.6',
+        'type': 'weather_underground',
+        'license': {
+            'source': 'Weather Underground'
+        }
+    }
+}
 
 '''
     "metadata pour toutes les valeurs meme Weather BE et FR": {
@@ -192,6 +226,9 @@ def normalize_be_fr_record(record):
             norm["vent_direction_original"] = wind_val
     if "Time" in record:
         norm["dh_utc"] = record["Time"]
+    # Ajouter station_id s'il est fourni
+    if "station_id" in record:
+        norm["station_id"] = record["station_id"]
     return norm
 
 def normalize_hourly_record(record):
@@ -199,7 +236,7 @@ def normalize_hourly_record(record):
     for k, v in record.items():
         key = HOURLY_TO_BE_FR.get(k, k)
         value, unit, original = extract_value_unit(v)
-        # Mets ici les unités par défaut selon la clé
+
         if key == "Temperature":
             unit = unit or "degC"
         if key == "Dew Point":
@@ -230,6 +267,25 @@ def normalize_hourly_record(record):
         norm["dh_utc"] = record["dh_utc"]
     return norm
 
+def create_weather_station(station_type, s3_key):
+    """Crée une station WeatherFR ou WeatherBE dans la base de données."""
+    if station_type not in WEATHER_STATIONS:
+        return None
+    
+    station_data = WEATHER_STATIONS[station_type].copy()
+    station_data['source_file'] = s3_key
+    station_data['created_at'] = datetime.now()
+    
+    # Vérifier si la station existe déjà
+    existing_station = db['stations'].find_one({'id': station_data['id']})
+    if not existing_station:
+        db['stations'].insert_one(station_data)
+        print(f"  ➕ Station {station_data['name']} ({station_data['id']}) créée")
+        return station_data['id']
+    else:
+        print(f"  ℹ️  Station {station_data['name']} ({station_data['id']}) existe déjà")
+        return existing_station['id']
+
 def import_csv_to_mongo(s3_key):
 
     # Lire le fichier CSV depuis S3
@@ -258,7 +314,7 @@ def import_csv_to_mongo(s3_key):
                                 stations_count += 1
                         
                         # Import données hourly directement
-                        if 'hourly' in data:
+                        if 'hourly' in data and isinstance(data['hourly'], dict):
                             for station_id, records in data['hourly'].items():
                                 for hour_index, record in enumerate(records):
                                     norm_record = normalize_hourly_record(record)
@@ -273,29 +329,59 @@ def import_csv_to_mongo(s3_key):
 
      # WEATHER BE/FR
         elif 'WeatherBE' in s3_key or 'WeatherFR' in s3_key:
+            # Déterminer le type de station
+            station_type = 'WeatherBE' if 'WeatherBE' in s3_key else 'WeatherFR'
+            
+            # Créer la station correspondante
+            station_id = create_weather_station(station_type, s3_key)
+            
             weather_count = 0 
             for index, row in df.iterrows():
                 try:
                     data = json.loads(row['_airbyte_data'])
                     norm_record = normalize_be_fr_record(data)
-                    doc = build_weather_doc(norm_record, s3_key, row_index=index)
+                    # Ajouter l'ID de station aux données normalisées
+                    norm_record['station_id'] = station_id
+                    doc = build_weather_doc(norm_record, s3_key, row_index=index, station_id=station_id)
                     db['weather'].insert_one(doc)
                     weather_count += 1
                 except Exception as e:
                     print(f"    ❌ Erreur ligne {index}: {e}")
             
-            print(f"  ✅ {weather_count} données weather")
+            print(f"  ✅ Station {station_type} créée avec {weather_count} données weather")
 
 def measure_data_quality():
     """Mesure la qualité des données après migration."""
-    print("\n📊 MESURE DE QUALITÉ DES DONNÉES")
+    print("\n____MESURE DE QUALITÉ DES DONNÉES____")
     print("=" * 50)
     
     # Comptage général
     total_stations = db['stations'].count_documents({})
     total_weather = db['weather'].count_documents({})
-    print(f"📍 Total stations : {total_stations}")
-    print(f"🌡️  Total mesures météo : {total_weather}")
+    print(f"=> Total stations : {total_stations}")
+    print(f"=> Total mesures météo : {total_weather}")
+    
+    # Répartition des stations par type/source
+    print(f"\n____RÉPARTITION DES STATIONS :____")
+    station_types = db['stations'].aggregate([
+        {"$group": {"_id": "$type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ])
+    for station_type in station_types:
+        type_name = station_type['_id'] if station_type['_id'] else "Unknown"
+        print(f"Type {type_name} : {station_type['count']} stations")
+    
+    # Lister les stations Weather Underground
+    weather_stations = list(db['stations'].find({"type": "weather_underground"}, {"id": 1, "name": 1, "city": 1}))
+    if weather_stations:
+        print(f"\n____STATIONS WEATHER UNDERGROUND :____")
+        for ws in weather_stations:
+            print(f"{ws.get('name', 'Unknown')} ({ws.get('id', 'Unknown')}) - {ws.get('city', 'Unknown')}")
+    
+    print(f"=> Total stations : {total_stations}")
+    print(f"=>  Total mesures météo : {total_weather}")
+    print(f"=> Total stations : {total_stations}")
+    print(f"=>  Total mesures météo : {total_weather}")
     
     # Mesures de qualité pour les stations
     stations_without_id = db['stations'].count_documents({"id": {"$in": [None, ""]}})
@@ -307,10 +393,10 @@ def measure_data_quality():
         ]
     })
     
-    print(f"\n🏭 QUALITÉ DES STATIONS :")
-    print(f"  ❌ Sans ID : {stations_without_id} ({stations_without_id/total_stations*100:.1f}%)")
-    print(f"  ❌ Sans nom : {stations_without_name} ({stations_without_name/total_stations*100:.1f}%)")
-    print(f"  ❌ Sans coordonnées : {stations_without_coords} ({stations_without_coords/total_stations*100:.1f}%)")
+    print(f"\n____QUALITÉ DES STATIONS :____")
+    print(f"  => Sans ID : {stations_without_id} ({stations_without_id/total_stations*100:.1f}%)")
+    print(f"  => Sans nom : {stations_without_name} ({stations_without_name/total_stations*100:.1f}%)")
+    print(f"  => Sans coordonnées : {stations_without_coords} ({stations_without_coords/total_stations*100:.1f}%)")
     
     # Mesures de qualité pour les données météo
     weather_without_station = db['weather'].count_documents({"station_id": {"$in": [None, ""]}})
@@ -319,12 +405,12 @@ def measure_data_quality():
     weather_without_pressure = db['weather'].count_documents({"measurements.pressure.value": {"$in": [None, ""]}})
     weather_without_humidity = db['weather'].count_documents({"measurements.humidity.value": {"$in": [None, ""]}})
     
-    print(f"\n🌡️  QUALITÉ DES DONNÉES MÉTÉO :")
-    print(f"  ❌ Sans station_id : {weather_without_station} ({weather_without_station/total_weather*100:.1f}%)")
-    print(f"  ❌ Sans date : {weather_without_date} ({weather_without_date/total_weather*100:.1f}%)")
-    print(f"  ❌ Sans température : {weather_without_temp} ({weather_without_temp/total_weather*100:.1f}%)")
-    print(f"  ❌ Sans pression : {weather_without_pressure} ({weather_without_pressure/total_weather*100:.1f}%)")
-    print(f"  ❌ Sans humidité : {weather_without_humidity} ({weather_without_humidity/total_weather*100:.1f}%)")
+    print(f"\n____QUALITÉ DES DONNÉES MÉTÉO :____")
+    print(f"  => Sans station_id : {weather_without_station} ({weather_without_station/total_weather*100:.1f}%)")
+    print(f"  => Sans date : {weather_without_date} ({weather_without_date/total_weather*100:.1f}%)")
+    print(f"  => Sans température : {weather_without_temp} ({weather_without_temp/total_weather*100:.1f}%)")
+    print(f"  => Sans pression : {weather_without_pressure} ({weather_without_pressure/total_weather*100:.1f}%)")
+    print(f"  => Sans humidité : {weather_without_humidity} ({weather_without_humidity/total_weather*100:.1f}%)")
     
     # Répartition par source
     print(f"\n📁 RÉPARTITION PAR SOURCE :")
@@ -376,8 +462,16 @@ def benchmark_weather_query(station_id, date_str):
         "dh_utc": {"$regex": date_str}
     }))
     duration = (time.time() - start) * 1000  # ms
-    print(f"⏱️ Temps de requête pour {station_id} le {date_str} : {duration:.2f} ms ({len(result)} résultats)")
+    print(f"- Temps de requête pour {station_id} le {date_str} : {duration:.2f} ms ({len(result)} résultats)")
     return duration
+
+def get_first_date_for_station(station_id):
+
+    doc = db['weather'].find_one({"station_id": station_id}, sort=[("dh_utc", 1)])
+    if doc and "dh_utc" in doc:
+        # Extraire juste la date (YYYY-MM-DD)
+        return str(doc["dh_utc"])[:10]
+    return None
 
 def main():
     # Vider les collections
@@ -394,11 +488,36 @@ def main():
             print(f"Importation de {csv_file}...")
             import_csv_to_mongo(csv_file)
     
-    print("\n✅ Import terminé!")
+    print("\n---- Import terminé! -----")
     
     # Mesure de qualité des données
     quality_metrics = measure_data_quality()
 
+def get_station_with_most_precipitation():
+    """Trouve la station avec le plus de précipitations totales."""
+    pipeline = [
+        {"$group": {
+            "_id": "$station_id",
+            "total_precip": {"$sum": {"$ifNull": ["$measurements.precipitation.accumulation", 0]}}
+        }},
+        {"$sort": {"total_precip": -1}},
+        {"$limit": 1}
+    ]
+
+    start = time.time()
+    result = list(db['weather'].aggregate(pipeline))
+    duration = (time.time() - start) * 1000  # ms
+    if result:
+        station_id = result[0]['_id']
+        total_precip = result[0]['total_precip']
+        station = db['stations'].find_one({'id': station_id})
+        station_name = station['name'] if station and 'name' in station else station_id
+        print(f"\nStation avec le plus de précipitations : {station_name} ({station_id})")
+        print(f"=> Précipitations totales : {total_precip:.2f} mm")
+        print(f"- Temps de requête : {duration:.2f} ms")
+    else:
+        print("Aucune donnée de précipitation trouvée.")
+
 if __name__ == "__main__":
     main()
-    benchmark_weather_query("07015", "2023-07-01")
+    get_station_with_most_precipitation()
