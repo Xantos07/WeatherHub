@@ -16,10 +16,13 @@ for filename in os.listdir(data_dir):
         xls = pd.ExcelFile(file_path)
         writer = pd.ExcelWriter(file_path.replace(".xlsx", "_with_date.xlsx"), engine="openpyxl")
         for sheet in xls.sheet_names:
+     
             date_str = convert_date(sheet)
             df = pd.read_excel(xls, sheet_name=sheet)
-            if date_str:
-                df["date"] = date_str
+            if date_str and 'Time' in df.columns:
+
+                df['Time'] = date_str + ' ' + df['Time'].astype(str)
+                print(f"  Feuille '{sheet}' -> Date: {date_str}")
             df.to_excel(writer, sheet_name=sheet, index=False)
         writer.close()
-        print(f"{file_path.replace('.xlsx', '_with_date.xlsx')} créé avec la colonne date ajoutée à chaque feuille.")
+        print(f"{file_path.replace('.xlsx', '_with_date.xlsx')} créé avec la date+heure spécifique à chaque feuille.")
