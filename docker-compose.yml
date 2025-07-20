@@ -35,6 +35,8 @@ services:
       - ./data:/app/data
       - ./.env:/app/.env
       - ./requirements.txt:/app/requirements.txt
+    command: ["python", "-u", "scripts/sync_monitor.py"]  # -u pour unbuffered output
+    restart: unless-stopped  # Redémarre automatiquement si crash
 
 volumes:
   mongodb_data:

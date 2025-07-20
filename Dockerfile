@@ -9,4 +9,5 @@ COPY .env /app/.env
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-CMD ["python", "scripts/import_refactored.py"]
+# Point d'entrée par défaut (peut être surchargé par docker-compose)
+CMD ["python", "scripts/sync_monitor.py"]
