@@ -106,40 +106,38 @@ class S3SyncMonitor:
         stations_count = self.db['stations'].count_documents({})
         weather_count = self.db['weather'].count_documents({})
         
-        if stations_count == 0 and weather_count == 0:
-            print("|| -- Import initial complet - Mode MAIN -- ||")
-            
-            # Vider les collections (comme dans main.py)
-            print("🧹 Vidage des collections MongoDB...")
-            self.importer.clear_collections()
-            
-            # Import complet
-            print("🌱 Import initial en cours...")
-            self.importer.import_all_csv_files(self.s3_bucket)
-            self.update_last_sync_time()
-            print("✅ Import initial terminé!")
-            
-            # Analyse qualité des données (comme dans main.py)
-            print("\n🔍 Lancement de l'analyse qualité...")
-            quality_metrics = self.analyzer.measure_data_quality()
-            
-            # Analyse des précipitations (comme dans main.py)
-            print("\n🌧️ Analyse des précipitations...")
-            self.analyzer.get_station_with_most_precipitation()
-            
-            # Benchmarks automatiques (comme dans main.py)
-            print("\n⚡ BENCHMARKS DE PERFORMANCE:")
-            for sid in ["07015", "ILAMAD25", "IICHTE19"]:
-                date = self.station_manager.get_first_date_for_station(sid)
-                if date:
-                    self.analyzer.benchmark_weather_query(sid, date)
-                else:
-                    print(f"/!\ Aucune donnée trouvée pour la station {sid}")
-            
-            print("\n🎉 Import initial et analyse terminés - Passage en mode surveillance")
-            
-        else:
-            print(f"📊 DB existante: {stations_count} stations, {weather_count} mesures")
+
+        print("|| -- Import initial complet - Mode MAIN -- ||")
+        
+        # Vider les collections (comme dans main.py)
+        print("🧹 Vidage des collections MongoDB...")
+        self.importer.clear_collections()
+        
+        # Import complet
+        print("🌱 Import initial en cours...")
+        self.importer.import_all_csv_files(self.s3_bucket)
+        self.update_last_sync_time()
+        print("✅ Import initial terminé!")
+        
+        # Analyse qualité des données (comme dans main.py)
+        print("\n🔍 Lancement de l'analyse qualité...")
+        quality_metrics = self.analyzer.measure_data_quality()
+        
+        # Analyse des précipitations (comme dans main.py)
+        print("\n🌧️ Analyse des précipitations...")
+        self.analyzer.get_station_with_most_precipitation()
+        
+        # Benchmarks automatiques (comme dans main.py)
+        print("\n⚡ BENCHMARKS DE PERFORMANCE:")
+        for sid in ["07015", "ILAMAD25", "IICHTE19"]:
+            date = self.station_manager.get_first_date_for_station(sid)
+            if date:
+                self.analyzer.benchmark_weather_query(sid, date)
+            else:
+                print(f"/!\ Aucune donnée trouvée pour la station {sid}")
+        
+        print("\n🎉 Import initial et analyse terminés - Passage en mode surveillance")
+        
 
 if __name__ == "__main__":
     S3_BUCKET = os.getenv('S3_BUCKET')
