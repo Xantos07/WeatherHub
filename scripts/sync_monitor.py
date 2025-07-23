@@ -3,6 +3,8 @@ import os
 from datetime import datetime, timedelta
 from database import db_connector
 from importer import WeatherDataImporter
+from analyzer import DataQualityAnalyzer
+from station_manager import StationManager
 
 class S3SyncMonitor:
 
@@ -14,6 +16,8 @@ class S3SyncMonitor:
         self.check_interval = check_interval
         self.importer = WeatherDataImporter()
         self.db = db_connector.get_database()
+        self.analyzer = DataQualityAnalyzer()
+        self.station_manager = StationManager()
         
     def get_last_sync_time(self):
         """Récupère la dernière heure de synchronisation."""
@@ -103,15 +107,42 @@ class S3SyncMonitor:
         weather_count = self.db['weather'].count_documents({})
         
         if stations_count == 0 and weather_count == 0:
-            print("🌱 Base de données vide - Import initial en cours...")
+            print("|| -- Import initial complet - Mode MAIN -- ||")
+            
+            # Vider les collections (comme dans main.py)
+            print("🧹 Vidage des collections MongoDB...")
+            self.importer.clear_collections()
+            
+            # Import complet
+            print("🌱 Import initial en cours...")
             self.importer.import_all_csv_files(self.s3_bucket)
             self.update_last_sync_time()
-            print("✅ Import initial terminé")
+            print("✅ Import initial terminé!")
+            
+            # Analyse qualité des données (comme dans main.py)
+            print("\n🔍 Lancement de l'analyse qualité...")
+            quality_metrics = self.analyzer.measure_data_quality()
+            
+            # Analyse des précipitations (comme dans main.py)
+            print("\n🌧️ Analyse des précipitations...")
+            self.analyzer.get_station_with_most_precipitation()
+            
+            # Benchmarks automatiques (comme dans main.py)
+            print("\n⚡ BENCHMARKS DE PERFORMANCE:")
+            for sid in ["07015", "ILAMAD25", "IICHTE19"]:
+                date = self.station_manager.get_first_date_for_station(sid)
+                if date:
+                    self.analyzer.benchmark_weather_query(sid, date)
+                else:
+                    print(f"/!\ Aucune donnée trouvée pour la station {sid}")
+            
+            print("\n🎉 Import initial et analyse terminés - Passage en mode surveillance")
+            
         else:
             print(f"📊 DB existante: {stations_count} stations, {weather_count} mesures")
 
 if __name__ == "__main__":
-    S3_BUCKET = os.getenv('S3_BUCKET', 'your-bucket')
+    S3_BUCKET = os.getenv('S3_BUCKET')
     CHECK_INTERVAL = int(os.getenv('SYNC_INTERVAL', '600'))  # 105 minutes
     
     monitor = S3SyncMonitor(S3_BUCKET, CHECK_INTERVAL)

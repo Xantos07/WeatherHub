@@ -6,7 +6,7 @@ from station_manager import StationManager
 def main():
     """Fonction principale d'importation et d'analyse des données."""
     print("|| -- Début de l'importation des données météorologiques -- ||")
-    
+
     # Initialisation des composants
     importer = WeatherDataImporter()
     analyzer = DataQualityAnalyzer()
