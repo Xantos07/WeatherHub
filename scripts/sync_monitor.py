@@ -6,10 +6,10 @@ from importer import WeatherDataImporter
 
 class S3SyncMonitor:
 
-    print(f"🚀 Démarrage de la surveillance S3 (intervalle: 5 mins)")
+    print(f"🚀 Démarrage de la surveillance S3 (intervalle: 10 mins)")
     """Surveillance et synchronisation automatique avec S3."""
     
-    def __init__(self, s3_bucket, check_interval=300):  # 5 minutes par défaut
+    def __init__(self, s3_bucket, check_interval=600):  # 10 minutes par défaut
         self.s3_bucket = s3_bucket
         self.check_interval = check_interval
         self.importer = WeatherDataImporter()
@@ -112,7 +112,7 @@ class S3SyncMonitor:
 
 if __name__ == "__main__":
     S3_BUCKET = os.getenv('S3_BUCKET', 'your-bucket')
-    CHECK_INTERVAL = int(os.getenv('SYNC_INTERVAL', '300'))  # 5 minutes
+    CHECK_INTERVAL = int(os.getenv('SYNC_INTERVAL', '600'))  # 105 minutes
     
     monitor = S3SyncMonitor(S3_BUCKET, CHECK_INTERVAL)
     monitor.start_monitoring()

@@ -1,4 +1,5 @@
 import boto3
+import os
 from pymongo import MongoClient
 from config import (
     AWS_ACCESS_KEY_ID, 
@@ -30,14 +31,17 @@ class DatabaseConnector:
     def get_mongo_client(self):
         """Retourne le client MongoDB."""
         if self.mongo_client is None:
-            # Pour le développement local avec Docker
-            self.mongo_client = MongoClient(
-                f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/"
-            )
-            # Pour ECR production, décommenter la ligne suivante et commenter la précédente
-            # self.mongo_client = MongoClient(
-            #     f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:27017/"
-            # )
+            # Détection automatique de l'environnement
+            if os.getenv('AWS_EXECUTION_ENV') or os.getenv('ECS_CONTAINER_METADATA_URI'):
+                # ECR/ECS : utilise ton serveur MongoDB AWS
+                mongo_uri = f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@{MONGO_HOST}:27017/"
+                print(f"🔗 Connexion MongoDB ECR : {MONGO_HOST}")
+            else:
+                # Local Docker : utilise le container mongodb
+                mongo_uri = f"mongodb://{MONGO_INITDB_ROOT_USERNAME}:{MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/"
+                print("🔗 Connexion MongoDB Local : mongodb")
+            
+            self.mongo_client = MongoClient(mongo_uri)
         return self.mongo_client
     
     def get_database(self, db_name='weatherhub'):
