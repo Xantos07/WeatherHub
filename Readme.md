@@ -1,10 +1,11 @@
-# WeatherHub - Script d'Import S3 vers MongoDB
+# WeatherHub
 
 ## 📋 Description
 
-Ce script importe et transforme les données météorologiques depuis Amazon S3 vers MongoDB, en uniformisant les différents formats de données (Hourly, WeatherBE, WeatherFR) dans une structure cohérente.
+Projet comportant Airbyte, le service ECR d'AWS et un système d'importation et de synchronisation.
 
-Lien vers comment déployer le projt sous le Service ECR d'AWS [wiki de déploiement sur AWS](https://github.com/Xantos07/WeatherHub/wiki/D%C3%A9ployer-sur-AWS-ECR)
+Lien vers comment déployer le projt sous le Service ECR d'AWS 
+[wiki de déploiement sur AWS](https://github.com/Xantos07/WeatherHub/wiki/D%C3%A9ployer-sur-AWS-ECR)
 
 
 ## 🏗️ Architecture des Données
@@ -144,11 +145,6 @@ MONGO_INITDB_ROOT_USERNAME=your_mongo_user
 MONGO_INITDB_ROOT_PASSWORD=your_mongo_password
 ```
 
-### Exécution
-```bash
-python test.py
-```
-
 ## 📊 Mesure de Qualité
 
 Le script génère automatiquement un rapport de qualité incluant :
@@ -178,11 +174,3 @@ Le script affiche :
 - Nombre de stations/mesures importées
 - Erreurs détaillées avec numéro de ligne
 - Rapport de qualité complet
-
-## 🔧 Maintenance
-
-Pour ajouter une nouvelle source :
-1. Créer le mapping des champs
-2. Ajouter la logique de conversion d'unités
-3. Intégrer dans `import_csv_to_mongo()`
-4. Mettre à jour la mesure de qualité
