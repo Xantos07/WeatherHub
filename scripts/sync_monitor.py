@@ -1,23 +1,50 @@
 import time
 import os
+import sys
 from datetime import datetime, timedelta
 from database import db_connector
 from importer import WeatherDataImporter
 from analyzer import DataQualityAnalyzer
 from station_manager import StationManager
 
-class S3SyncMonitor:
+def force_log(msg):
+    """Force l'affichage immédiat des logs ECR."""
+    print(msg)
+    sys.stdout.flush()
+    sys.stderr.flush()
 
-    print(f"🚀 Démarrage de la surveillance S3 (intervalle: 10 mins)")
+class S3SyncMonitor:
     """Surveillance et synchronisation automatique avec S3."""
     
     def __init__(self, s3_bucket, check_interval=600):  # 10 minutes par défaut
-        self.s3_bucket = s3_bucket
-        self.check_interval = check_interval
-        self.importer = WeatherDataImporter()
-        self.db = db_connector.get_database()
-        self.analyzer = DataQualityAnalyzer()
-        self.station_manager = StationManager()
+        force_log(f"🔧 Initialisation S3SyncMonitor...")
+        try:
+            self.s3_bucket = s3_bucket
+            self.check_interval = check_interval
+            force_log(f"📦 Configuration: bucket={s3_bucket}, interval={check_interval}s")
+            
+            force_log("🔌 Création WeatherDataImporter...")
+            self.importer = WeatherDataImporter()
+            force_log("✅ WeatherDataImporter créé")
+            
+            force_log("🗄️ Connexion à la base de données...")
+            self.db = db_connector.get_database()
+            force_log("✅ Base de données connectée")
+            
+            force_log("📊 Initialisation DataQualityAnalyzer...")
+            self.analyzer = DataQualityAnalyzer()
+            force_log("✅ DataQualityAnalyzer initialisé")
+            
+            force_log("🏗️ Initialisation StationManager...")
+            self.station_manager = StationManager()
+            force_log("✅ StationManager initialisé")
+            
+            force_log("🎉 S3SyncMonitor entièrement initialisé!")
+        except Exception as e:
+            force_log(f"❌ ERREUR dans __init__: {e}")
+            import traceback
+            force_log(f"📋 Traceback: {traceback.format_exc()}")
+            raise
         
     def get_last_sync_time(self):
         """Récupère la dernière heure de synchronisation."""
@@ -79,27 +106,35 @@ class S3SyncMonitor:
     
     def start_monitoring(self):
         """Démarre la surveillance continue."""
-        print(f"🚀 Démarrage de la surveillance S3 (intervalle: {self.check_interval}s)")
-        print(f"📂 Bucket surveillé: {self.s3_bucket}")
-        
-        # Import initial au démarrage si la DB est vide
-        self.initial_import_if_empty()
-        
-        while True:
-            try:
-                print(f"\n⏰ Vérification à {datetime.now()}")
-                self.sync_new_files()
-                
-                print(f"😴 Attente de {self.check_interval} secondes...")
-                time.sleep(self.check_interval)
-                
-            except KeyboardInterrupt:
-                print("\n⏹️  Arrêt de la surveillance demandé")
-                break
-            except Exception as e:
-                print(f"❌ Erreur durante la surveillance: {e}")
-                print(f"🔄 Reprise dans {self.check_interval} secondes...")
-                time.sleep(self.check_interval)
+        try:
+            force_log(f"🚀 Démarrage de la surveillance S3 (intervalle: {self.check_interval}s)")
+            force_log(f"📂 Bucket surveillé: {self.s3_bucket}")
+            
+            # Import initial au démarrage si la DB est vide
+            force_log("🌱 Appel de initial_import_if_empty...")
+            self.initial_import_if_empty()
+            force_log("✅ initial_import_if_empty terminé")
+            
+            while True:
+                try:
+                    force_log(f"\n⏰ Vérification à {datetime.now()}")
+                    self.sync_new_files()
+                    
+                    force_log(f"😴 Attente de {self.check_interval} secondes...")
+                    time.sleep(self.check_interval)
+                    
+                except KeyboardInterrupt:
+                    force_log("\n⏹️  Arrêt de la surveillance demandé")
+                    break
+                except Exception as e:
+                    force_log(f"❌ Erreur durante la surveillance: {e}")
+                    force_log(f"🔄 Reprise dans {self.check_interval} secondes...")
+                    time.sleep(self.check_interval)
+        except Exception as e:
+            force_log(f"❌ ERREUR CRITIQUE dans start_monitoring: {e}")
+            import traceback
+            force_log(f"📋 Traceback: {traceback.format_exc()}")
+            raise
     
     def initial_import_if_empty(self):
         """Import initial si les collections sont vides."""
@@ -140,8 +175,23 @@ class S3SyncMonitor:
         
 
 if __name__ == "__main__":
-    S3_BUCKET = os.getenv('S3_BUCKET')
-    CHECK_INTERVAL = int(os.getenv('SYNC_INTERVAL', '600'))  # 105 minutes
-    
-    monitor = S3SyncMonitor(S3_BUCKET, CHECK_INTERVAL)
-    monitor.start_monitoring()
+    try:
+        force_log("🔥 DÉMARRAGE SYNC_MONITOR")
+        force_log(f"🌍 Environment: {os.getenv('AWS_EXECUTION_ENV', 'LOCAL')}")
+        force_log(f"📦 S3 Bucket: {os.getenv('S3_BUCKET', 'NON DÉFINI')}")
+        force_log(f"🗄️ Mongo Host: {os.getenv('MONGO_HOST', 'NON DÉFINI')}")
+        
+        S3_BUCKET = os.getenv('S3_BUCKET')
+        CHECK_INTERVAL = int(os.getenv('SYNC_INTERVAL', '600'))
+        
+        force_log(f"⚙️ Configuration: Bucket={S3_BUCKET}, Interval={CHECK_INTERVAL}s")
+        
+        force_log("🏗️ Création du monitor...")
+        monitor = S3SyncMonitor(S3_BUCKET, CHECK_INTERVAL)
+        force_log("✅ Monitor créé, démarrage de la surveillance...")
+        monitor.start_monitoring()
+    except Exception as e:
+        force_log(f"💥 ERREUR FATALE: {e}")
+        import traceback
+        force_log(f"📋 Traceback complet: {traceback.format_exc()}")
+        raise
